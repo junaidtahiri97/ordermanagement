@@ -4,112 +4,211 @@
   <meta charset="UTF-8">
   <title>Order Details</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background-color: #eee; }
-    input, button { padding: 5px; margin: 5px 0; }
-    input[type="number"], input[type="date"], input[type="text"] { width: 120px; }
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    input, button { padding: 8px; margin: 6px 0; }
+    label { display: block; margin-top: 10px; }
+    .box { border: 1px solid #ccc; padding: 15px; margin-top: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid #ccc; padding: 8px; }
+    th { background: #eee; }
+    a { color: blue; text-decoration: underline; cursor: pointer; }
+    a:hover { color: darkblue; }
   </style>
 </head>
 <body>
+
   <h2>Order Details</h2>
 
-  <div>
+  <!-- RETURN BUTTON -->
+  <button id="returnBtn">← Return to Orders</button>
+
+  <!-- ORDER INFO -->
+  <div id="orderInfo" class="box">
+    Loading order...
+  </div>
+
+  <!-- ADD DELIVERY -->
+  <div class="box">
     <h3>Add Delivery</h3>
-    <input type="text" id="customerName" placeholder="Customer Name" />
-    <input type="number" id="quantity" placeholder="Quantity" />
-    <input type="date" id="deliveryDate" />
+
+    <label>Customer Name</label>
+    <input type="text" id="customerName" placeholder="Enter customer name">
+
+    <label>Quantity Despatched</label>
+    <input type="number" id="despatchedQty">
+
     <button id="addDeliveryBtn">Add Delivery</button>
     <p id="status"></p>
   </div>
 
-  <h3>Delivery History</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Customer</th>
-        <th>Quantity</th>
-        <th>Date</th>
-      </tr>
-    </thead>
-    <tbody id="historyTbody"></tbody>
-  </table>
-  <button onclick="goBack()">Back to Orders</button>
+  <!-- DELIVERY HISTORY -->
+  <div class="box">
+    <h3>Delivery History</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Customer</th>
+          <th>Quantity</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody id="deliveryTableBody">
+        <tr><td colspan="4">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.36.0"></script>
+  <script src="./config.js"></script>
+
   <script>
-    const { createClient } = supabase;
-    const supabaseClient = createClient(
-      'https://iefldtmgaeatngacmyhc.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllZmxkdG1nYWVhdG5nYWNteWhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxMzc0MzAsImV4cCI6MjA4MDcxMzQzMH0.D6GyEfLVB14ql-FyoCMdw0_MrckvlCcFWBodWSRfr4Y'
-    );
+    const orderInfoDiv = document.getElementById("orderInfo");
+    const statusDiv = document.getElementById("status");
+    const deliveryBody = document.getElementById("deliveryTableBody");
+    const returnBtn = document.getElementById("returnBtn");
 
     const params = new URLSearchParams(window.location.search);
-    const orderId = params.get('id');
-    const historyTbody = document.getElementById('historyTbody');
-    const status = document.getElementById('status');
+    const orderId = parseInt(params.get("id"));
 
-    // FETCH DELIVERY HISTORY
-    async function fetchHistory() {
+    if (!orderId || isNaN(orderId)) {
+      orderInfoDiv.innerHTML = "❌ Invalid order ID. Please open from Orders page.";
+      throw new Error("Invalid order ID");
+    }
+
+    returnBtn.addEventListener("click", () => {
+      window.location.href = "index.html";
+    });
+
+    async function loadOrder() {
       const { data, error } = await supabaseClient
-        .from('deliveries')
-        .select('*')
-        .eq('order_id', orderId)
-        .order('delivery_date', { ascending: true });
+        .from("orders")
+        .select("*")
+        .eq("id", orderId)
+        .single();
 
-      if(error) {
-        historyTbody.innerHTML = `<tr><td colspan="3">Error: ${error.message}</td></tr>`;
+      if (error) {
+        orderInfoDiv.innerHTML = "Error loading order: " + error.message;
         return;
       }
 
-      if(data.length === 0) {
-        historyTbody.innerHTML = `<tr><td colspan="3">No deliveries yet</td></tr>`;
+      const despatched = data.stock_despatched || 0;
+      const left = data.stock_arrived - despatched;
+
+      orderInfoDiv.innerHTML = `
+        <p><strong>ID:</strong> ${data.id}</p>
+        <p><strong>Design:</strong> ${data.design}</p>
+        <p><strong>Stock Arrived:</strong> ${data.stock_arrived}</p>
+        <p><strong>Stock Despatched:</strong> ${despatched}</p>
+        <p><strong>Stock Left:</strong> ${left}</p>
+      `;
+    }
+
+    async function loadDeliveries() {
+      const { data, error } = await supabaseClient
+        .from("deliveries")
+        .select("*")
+        .eq("order_id", orderId)
+        .order("id", { ascending: true });
+
+      if (error) {
+        deliveryBody.innerHTML = `<tr><td colspan="4">Error loading deliveries</td></tr>`;
         return;
       }
 
-      historyTbody.innerHTML = '';
+      if (!data.length) {
+        deliveryBody.innerHTML = `<tr><td colspan="4">No deliveries yet</td></tr>`;
+        return;
+      }
+
+      deliveryBody.innerHTML = "";
+
       data.forEach(d => {
-        historyTbody.innerHTML += `
+        deliveryBody.innerHTML += `
           <tr>
+            <td>${d.id}</td>
             <td>${d.customer_name}</td>
             <td>${d.quantity}</td>
-            <td>${d.delivery_date}</td>
-          </tr>`;
+            <td>${new Date(d.delivery_date).toLocaleString()}</td>
+          </tr>
+        `;
       });
     }
 
-    // ADD DELIVERY
-    document.getElementById('addDeliveryBtn').addEventListener('click', async () => {
-      const customer = document.getElementById('customerName').value.trim();
-      const quantity = parseInt(document.getElementById('quantity').value);
-      const date = document.getElementById('deliveryDate').value;
+    document.getElementById("addDeliveryBtn").addEventListener("click", async () => {
+      const qty = parseInt(document.getElementById("despatchedQty").value);
+      const customerName = document.getElementById("customerName").value.trim();
 
-      if(!customer || isNaN(quantity) || quantity <= 0 || !date) {
-        status.innerText = "❌ Enter valid customer, quantity, and date";
+      if (!customerName) {
+        statusDiv.innerText = "Customer name required.";
+        statusDiv.style.color = "red";
         return;
       }
 
-      const { data, error } = await supabaseClient.from('deliveries').insert([
-        { order_id: orderId, customer_name: customer, quantity, delivery_date: date }
-      ]);
-
-      if(error) {
-        status.innerText = "❌ Error adding delivery: " + error.message;
-      } else {
-        status.innerText = "✅ Delivery added!";
-        document.getElementById('customerName').value = '';
-        document.getElementById('quantity').value = '';
-        document.getElementById('deliveryDate').value = '';
-        fetchHistory();
+      if (!qty || qty <= 0) {
+        statusDiv.innerText = "Enter a valid despatched quantity.";
+        statusDiv.style.color = "red";
+        return;
       }
+
+      // Fetch existing order
+      const { data: order, error: orderError } = await supabaseClient
+        .from("orders")
+        .select("*")
+        .eq("id", orderId)
+        .single();
+
+      if (orderError) {
+        statusDiv.innerText = "Error fetching order: " + orderError.message;
+        statusDiv.style.color = "red";
+        return;
+      }
+
+      const updatedDespatched = (order.stock_despatched || 0) + qty;
+
+      // Update main stock
+      const { error: updateError } = await supabaseClient
+        .from("orders")
+        .update({ stock_despatched: updatedDespatched })
+        .eq("id", orderId);
+
+      if (updateError) {
+        statusDiv.innerText = "Error updating stock: " + updateError.message;
+        statusDiv.style.color = "red";
+        return;
+      }
+
+      // Insert delivery record
+      const { error: insertError } = await supabaseClient
+        .from("deliveries")
+        .insert([
+          {
+            order_id: orderId,
+            quantity: qty,
+            customer_name: customerName,
+            delivery_date: new Date().toISOString()
+          }
+        ]);
+
+      if (insertError) {
+        statusDiv.innerText = "Error inserting delivery: " + insertError.message;
+        statusDiv.style.color = "red";
+        return;
+      }
+
+      statusDiv.innerText = "Delivery added successfully!";
+      statusDiv.style.color = "green";
+
+      document.getElementById("customerName").value = "";
+      document.getElementById("despatchedQty").value = "";
+
+      loadOrder();
+      loadDeliveries();
     });
 
-    function goBack() {
-      window.location.href = 'index.html';
-    }
-
-    window.addEventListener('load', fetchHistory);
+    loadOrder();
+    loadDeliveries();
   </script>
+
 </body>
 </html>
