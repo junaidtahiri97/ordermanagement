@@ -1,166 +1,117 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Order Management</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Designs Dashboard</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background-color: #eee; }
-    #ordersDiv { display: none; }
-    input, button { padding: 5px; margin: 5px 0; }
-    a { color: blue; cursor: pointer; text-decoration: underline; }
-    a:hover { color: darkblue; }
+    body { font-family: Arial, sans-serif; margin: 0; background: #fafafa; }
+    h1 { padding: 20px; text-align: center; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+    th { background: #f1f1f1; }
+    tr:hover { background: #f5f5f5; cursor: pointer; }
+    .modal-bg {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center;
+    }
+    .modal {
+      background: white; padding: 20px; border-radius: 6px; width: 360px;
+    }
+    .close-btn { float: right; cursor: pointer; color: #444; }
+    button {
+      padding: 10px 14px;
+      background: #007bff; border: none; color: white; border-radius: 4px;
+      cursor: pointer;
+    }
   </style>
 </head>
+
 <body>
-  <h2>Order Management System</h2>
+  <h1>Designs Overview</h1>
 
-  <div id="loginDiv">
-    <p>Login to view orders</p>
-    <input type="email" id="email" placeholder="Email" />
-    <input type="password" id="password" placeholder="Password" />
-    <button id="loginBtn">Login</button>
-    <p id="loginStatus"></p>
+  <table id="designTable">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Design</th>
+        <th>Stock Left</th>
+        <th>Stock Delivered</th>
+      </tr>
+    </thead>
+    <tbody id="designBody"></tbody>
+  </table>
+
+  <!-- Delivery Modal -->
+  <div id="modalBg" class="modal-bg">
+    <div class="modal">
+      <span class="close-btn" onclick="closeModal()">✖</span>
+      <h3>Add Delivery</h3>
+
+      <form id="deliveryForm" onsubmit="submitDelivery(event)">
+        <input type="hidden" id="deliveryDesignId">
+
+        <label>Quantity Delivered</label>
+        <input type="number" id="deliveryQty" required style="width:100%;">
+
+        <button type="submit">Save Delivery</button>
+      </form>
+    </div>
   </div>
-
-  <div id="ordersDiv">
-    <h3>Add New Order</h3>
-    <input type="text" id="newDesign" placeholder="Design Name" />
-    <input type="number" id="newStock" placeholder="Stock Ordered" />
-    <button id="addOrderBtn">Add Order</button>
-    <p id="addStatus"></p>
-
-    <h3>Orders Table</h3>
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Design</th>
-          <th>Stock Ordered</th>
-          <th>Stock Delivered</th>
-          <th>Stock Left</th>
-        </tr>
-      </thead>
-      <tbody id="ordersTbody"></tbody>
-    </table>
-    <button id="logoutBtn">Logout</button>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.36.0"></script>
 
   <script>
-    const { createClient } = supabase;
-    const supabaseClient = createClient(
-      'https://iefldtmgaeatngacmyhc.supabase.co',
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllZmxkdG1nYWVhdG5nYWNteWhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxMzc0MzAsImV4cCI6MjA4MDcxMzQzMH0.D6GyEfLVB14ql-FyoCMdw0_MrckvlCcFWBodWSRfr4Y'
-    );
+    // Fetch all designs
+    async function loadDesigns() {
+      const res = await fetch('/get-designs');
+      const rows = await res.json();
 
-    const loginDiv = document.getElementById('loginDiv');
-    const ordersDiv = document.getElementById('ordersDiv');
-    const loginStatus = document.getElementById('loginStatus');
-    const ordersTbody = document.getElementById('ordersTbody');
-    const addStatus = document.getElementById('addStatus');
+      const body = document.getElementById('designBody');
+      body.innerHTML = '';
 
-    // LOGIN
-    document.getElementById('loginBtn').addEventListener('click', async () => {
-      const email = document.getElementById('email').value;
-      const password = document.getElementById('password').value;
+      rows.sort((a, b) => b.stock_delivered - a.stock_delivered); // Ensure ordering
 
-      loginStatus.innerText = "Logging in...";
-      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.onclick = () => openModal(row.id);
 
-      if(error) {
-        loginStatus.innerText = "❌ Login failed: " + error.message;
-      } else {
-        loginStatus.innerText = "✅ Logged in!";
-        loginDiv.style.display = 'none';
-        ordersDiv.style.display = 'block';
-        fetchOrders();
-      }
-    });
-
-    // LOGOUT
-    document.getElementById('logoutBtn').addEventListener('click', async () => {
-      await supabaseClient.auth.signOut();
-      loginDiv.style.display = 'block';
-      ordersDiv.style.display = 'none';
-      loginStatus.innerText = '';
-    });
-
-    // FETCH ORDERS
-    async function fetchOrders() {
-      const { data, error } = await supabaseClient
-        .from('orders')
-        .select('*')
-        .order('id', { ascending: true });
-
-      if(error) {
-        ordersTbody.innerHTML = `<tr><td colspan="5">Error: ${error.message}</td></tr>`;
-        return;
-      }
-
-      if(data.length === 0) {
-        ordersTbody.innerHTML = `<tr><td colspan="5">No orders found</td></tr>`;
-        return;
-      }
-
-      ordersTbody.innerHTML = '';
-      data.forEach(o => {
-        const stockDelivered = o.stock_delivered || 0;
-        const stockLeft = o.stock_ordered - stockDelivered;
-        const designName = o.design || o.design_name || 'N/A';
-
-        ordersTbody.innerHTML += `
-          <tr>
-            <td><a onclick="viewOrder(${o.id})">${o.id}</a></td>
-            <td><a onclick="viewOrder(${o.id})">${designName}</a></td>
-            <td>${o.stock_ordered}</td>
-            <td>${stockDelivered}</td>
-            <td>${stockLeft}</td>
-          </tr>`;
+        tr.innerHTML = `
+          <td>${row.id}</td>
+          <td>${row.design_name}</td>
+          <td>${row.stock_left}</td>
+          <td>${row.stock_delivered}</td>
+        `;
+        body.appendChild(tr);
       });
     }
 
-    // ADD NEW ORDER
-    document.getElementById('addOrderBtn').addEventListener('click', async () => {
-      const design = document.getElementById('newDesign').value.trim();
-      const stock = parseInt(document.getElementById('newStock').value);
-
-      if(!design || isNaN(stock) || stock <= 0) {
-        addStatus.innerText = "❌ Enter valid design and stock.";
-        return;
-      }
-
-      const { data, error } = await supabaseClient.from('orders').insert([
-        { design: design, stock_ordered: stock, stock_delivered: 0 }
-      ]);
-
-      if(error) {
-        addStatus.innerText = "❌ Error adding order: " + error.message;
-      } else {
-        addStatus.innerText = "✅ Order added!";
-        document.getElementById('newDesign').value = '';
-        document.getElementById('newStock').value = '';
-        fetchOrders();
-      }
-    });
-
-    // VIEW ORDER - redirect to order page
-    function viewOrder(orderId) {
-      window.location.href = `order.html?id=${orderId}`;
+    function openModal(id) {
+      document.getElementById('deliveryDesignId').value = id;
+      document.getElementById('modalBg').style.display = 'flex';
     }
 
-    // AUTO SHOW IF LOGGED IN
-    window.addEventListener('load', async () => {
-      const sessionData = await supabaseClient.auth.getSession();
-      if(sessionData.data.session) {
-        loginDiv.style.display = 'none';
-        ordersDiv.style.display = 'block';
-        fetchOrders();
-      }
-    });
+    function closeModal() {
+      document.getElementById('modalBg').style.display = 'none';
+    }
+
+    // Add delivery then update stock
+    async function submitDelivery(e) {
+      e.preventDefault();
+
+      const id = document.getElementById('deliveryDesignId').value;
+      const qty = parseInt(document.getElementById('deliveryQty').value);
+
+      await fetch('/add-delivery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ design_id: id, qty })
+      });
+
+      closeModal();
+      loadDesigns(); // refresh table with updated stock and sorted deliveries
+    }
+
+    loadDesigns();
   </script>
+
 </body>
 </html>
