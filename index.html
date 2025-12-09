@@ -50,7 +50,12 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.36.0"></script>
-  <script src="./config.js"></script>
+  <script>
+const supabaseUrl = "https://iefldtmgaeatngacmyhc.supabase.co";
+  const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllZmxkdG1nYWVhdG5nYWNteWhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxMzc0MzAsImV4cCI6MjA4MDcxMzQzMH0.D6GyEfLVB14ql-FyoCMdw0_MrckvlCcFWBodWSRfr4Y";
+  const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+    
+  </script>
 
   <script>
     const loginDiv = document.getElementById("loginDiv");
