@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Order Details</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #eee; }
+    input, button { padding: 5px; margin: 5px 0; }
+    input[type="number"], input[type="date"], input[type="text"] { width: 120px; }
+  </style>
+</head>
+<body>
+  <h2>Order Details</h2>
+
+  <div>
+    <h3>Add Delivery</h3>
+    <input type="text" id="customerName" placeholder="Customer Name" />
+    <input type="number" id="quantity" placeholder="Quantity" />
+    <input type="date" id="deliveryDate" />
+    <button id="addDeliveryBtn">Add Delivery</button>
+    <p id="status"></p>
+  </div>
+
+  <h3>Delivery History</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Customer</th>
+        <th>Quantity</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody id="historyTbody"></tbody>
+  </table>
+  <button onclick="goBack()">Back to Orders</button>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.36.0"></script>
+  <script>
+    const { createClient } = supabase;
+    const supabaseClient = createClient(
+      'https://iefldtmgaeatngacmyhc.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllZmxkdG1nYWVhdG5nYWNteWhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxMzc0MzAsImV4cCI6MjA4MDcxMzQzMH0.D6GyEfLVB14ql-FyoCMdw0_MrckvlCcFWBodWSRfr4Y'
+    );
+
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get('id');
+    const historyTbody = document.getElementById('historyTbody');
+    const status = document.getElementById('status');
+
+    // FETCH DELIVERY HISTORY
+    async function fetchHistory() {
+      const { data, error } = await supabaseClient
+        .from('deliveries')
+        .select('*')
+        .eq('order_id', orderId)
+        .order('delivery_date', { ascending: true });
+
+      if(error) {
+        historyTbody.innerHTML = `<tr><td colspan="3">Error: ${error.message}</td></tr>`;
+        return;
+      }
+
+      if(data.length === 0) {
+        historyTbody.innerHTML = `<tr><td colspan="3">No deliveries yet</td></tr>`;
+        return;
+      }
+
+      historyTbody.innerHTML = '';
+      data.forEach(d => {
+        historyTbody.innerHTML += `
+          <tr>
+            <td>${d.customer_name}</td>
+            <td>${d.quantity}</td>
+            <td>${d.delivery_date}</td>
+          </tr>`;
+      });
+    }
+
+    // ADD DELIVERY
+    document.getElementById('addDeliveryBtn').addEventListener('click', async () => {
+      const customer = document.getElementById('customerName').value.trim();
+      const quantity = parseInt(document.getElementById('quantity').value);
+      const date = document.getElementById('deliveryDate').value;
+
+      if(!customer || isNaN(quantity) || quantity <= 0 || !date) {
+        status.innerText = "❌ Enter valid customer, quantity, and date";
+        return;
+      }
+
+      const { data, error } = await supabaseClient.from('deliveries').insert([
+        { order_id: orderId, customer_name: customer, quantity, delivery_date: date }
+      ]);
+
+      if(error) {
+        status.innerText = "❌ Error adding delivery: " + error.message;
+      } else {
+        status.innerText = "✅ Delivery added!";
+        document.getElementById('customerName').value = '';
+        document.getElementById('quantity').value = '';
+        document.getElementById('deliveryDate').value = '';
+        fetchHistory();
+      }
+    });
+
+    function goBack() {
+      window.location.href = 'index.html';
+    }
+
+    window.addEventListener('load', fetchHistory);
+  </script>
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Order History</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #eee; }
+    input[type="number"] { width: 70px; }
+    button { padding: 5px; margin: 3px; }
+  </style>
+</head>
+<body>
+  <h2 id="designTitle">Order History</h2>
+  <button onclick="goBack()">⬅ Back to Orders</button>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Order ID</th>
+        <th>Customer</th>
+        <th>Stock Ordered</th>
+        <th>Stock Delivered</th>
+        <th>Stock Left</th>
+        <th>Delivery Dates</th>
+        <th>Update Delivery</th>
+      </tr>
+    </thead>
+    <tbody id="historyTbody"></tbody>
+  </table>
+
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.36.0"></script>
+  <script>
+    const { createClient } = supabase;
+    const supabaseClient = createClient(
+      'https://iefldtmgaeatngacmyhc.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllZmxkdG1nYWVhdG5nYWNteWhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxMzc0MzAsImV4cCI6MjA4MDcxMzQzMH0.D6GyEfLVB14ql-FyoCMdw0_MrckvlCcFWBodWSRfr4Y'
+
+    );
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const design = urlParams.get('design');
+    document.getElementById('designTitle').innerText = `Order History for "${design}"`;
+    const historyTbody = document.getElementById('historyTbody');
+
+    async function fetchOrderHistory() {
+      const { data, error } = await supabaseClient
+        .from('orders')
+        .select('*')
+        .eq('design', design)
+        .order('id', { ascending: true });
+
+      if(error) {
+        historyTbody.innerHTML = `<tr><td colspan="7">Error: ${error.message}</td></tr>`;
+        return;
+      }
+
+      if(data.length === 0) {
+        historyTbody.innerHTML = `<tr><td colspan="7">No orders found</td></tr>`;
+        return;
+      }
+
+      historyTbody.innerHTML = '';
+      data.forEach(o => {
+        const stockLeft = o.stock_ordered - (o.stock_delivered || 0);
+        const deliveryDates = (o.delivery_dates || []).join(', ');
+
+        historyTbody.innerHTML += `
+          <tr>
+            <td>${o.id}</td>
+            <td>${o.customer_name}</td>
+            <td>${o.stock_ordered}</td>
+            <td>${o.stock_delivered || 0}</td>
+            <td>${stockLeft}</td>
+            <td>${deliveryDates}</td>
+            <td>
+              <input type="number" id="deliver_${o.id}" placeholder="Qty" />
+              <button onclick="deliverStock(${o.id})">Deliver</button>
+            </td>
+          </tr>`;
+      });
+    }
+
+    async function deliverStock(orderId) {
+      const deliveredQty = parseInt(document.getElementById(`deliver_${orderId}`).value);
+      if(isNaN(deliveredQty) || deliveredQty <= 0) {
+        alert("Enter a valid delivery quantity");
+        return;
+      }
+
+      try {
+        const { data: orderData, error: fetchError } = await supabaseClient
+          .from('orders')
+          .select('stock_delivered, delivery_dates')
+          .eq('id', orderId)
+          .single();
+        if(fetchError) throw fetchError;
+
+        const newStockDelivered = (orderData.stock_delivered || 0) + deliveredQty;
+        const newDeliveryDates = [...(orderData.delivery_dates || []), new Date().toLocaleDateString()];
+
+        const { error: updateError } = await supabaseClient
+          .from('orders')
+          .update({
+            stock_delivered: newStockDelivered,
+            delivery_dates: newDeliveryDates
+          })
+          .eq('id', orderId);
+        if(updateError) throw updateError;
+
+        document.getElementById(`deliver_${orderId}`).value = '';
+        fetchOrderHistory();
+      } catch(err) {
+        alert('Error updating delivery: ' + err.message);
+      }
+    }
+
+    function goBack() {
+      window.location.href = 'index.html';
+    }
+
+    // Initial fetch
+    fetchOrderHistory();
+  </script>
+</body>
+</html>
